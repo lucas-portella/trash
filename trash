@@ -1,0 +1,159 @@
+trash_dir="$HOME/.trash"		#Diretório da lixeira
+
+function ctrash () {
+	if [ ! -d $trash_dir ]; then
+		mkdir $trash_dir
+	fi
+}
+
+function compress () {
+	file=$1
+	
+	if [ -f $file ]; then
+		zip -q $file.zip $file && rm -f $file
+	elif [ -d $file ]; then
+		zip -rq $file.zip $file && rm -rf $file
+	else
+		return 1
+	fi
+
+	return 0
+}
+
+function extract () {
+	file=$1
+
+	if [ -f $file ]; then
+		case $file in
+			*.zip )	unzip -q $file && rm -f $file	;; 
+			*)			echo "Problema ao descompactar $file"	;;
+		esac
+	elif [ -d $file ]; then
+		case $file in
+			*.zip )	dir_name=$($file%.zip) && unzip -q $file -d $dir_name && rm -f $file	;; 
+			*)			echo "Problema ao descompactar $file"	;;
+		esac
+	else
+		echo "Arquivo $file não encontrado." 
+	fi
+}
+
+function list () {
+
+	if [ -d $trash_dir ]; then
+		if [ $(ls $trash_dir | wc -l) -eq 0 ]; then
+			echo "A lixeira está vazia."
+		else
+			echo "Arquivos na lixeira:"
+			for archive in $(ls $trash_dir)
+			do
+				echo ${archive%.zip}
+			done
+		fi
+	else
+		echo "Lixeira não existente. Execute o comando 'trash -c' para criá-la."
+	fi
+}
+
+function remove () {
+	archive=$1
+
+	if [ -f $archive -o -d $archive ]; then
+		compress $archive
+		zipfile=$archive.zip
+			
+		if [ -f $zipfile ]; then
+			mv $zipfile $trash_dir
+			echo "$archive movido para a lixeira"
+		else
+			echo "erro ao remover"
+		fi
+	
+	else
+		echo "Arquivo $archive não encontrado"
+	fi
+}
+
+function recover () {
+	file=$1
+	current_dir=$PWD	
+
+	for archive in $(ls $trash_dir)
+	do
+		archive=${archive%.zip}
+		if [ $archive == $file ]; then
+			extract $trash_dir/$archive.zip  
+			break
+		fi	
+	done
+}
+
+function limpa_lixeira () {
+	if [ -d $trash_dir ]; then
+		echo "Esvaziando Lixeira:"
+		for file in $(ls $trash_dir)
+		do
+			echo "Removendo arquivo ${file%.zip} .."
+			rm -f $trash_dir/$file
+		done
+		echo	
+		if [ $(ls $trash_dir | wc -l) -eq 0 ]; then
+			echo "Lixeira esvaziada com sucesso."
+		else
+			echo "Erro ao esvaziar a lixeira. Favor verifique" 
+		fi
+
+	else
+		echo "Lixeira não encontrada. Use o comando 'trash -c' para criá-la"
+	fi
+}
+
+# limpa lixo com mais de 30 dias na lixeira
+function limpa_periodica () {
+	if [ -d $trash_dir ]; then
+		tempo_atual=$(date +%s)	
+		tempo_mes_em_segundos=$((30*24*60*60))
+		
+		for file in $(ls $trash_dir)
+		do
+
+			tempo_arquivo=$(date -r $trash_dir/$file +%s)
+			dif_tempos=$[$tempo_atual - $tempo_arquivo]
+			if [ $dif_tempos -gt $tempo_mes_em_segundos ]; then
+				rm -f $trash_dir/$file
+			fi
+
+		done
+
+	fi
+}
+
+function imprime_instrucoes () {
+	echo "TRASH: UTILITÁRIO DE LIXO"
+	echo "Utilização: trash -[OPÇÃO] [ARQUIVO | DIRETÓRIO]"
+	echo " -r : remover arquivos ou diretórios."
+	echo " -l : listar arquivos e diretórios na lixeira."
+	echo " -c : criar lixeira."
+	echo " -d : restaurar arquivos ou diretórios da lixeira."
+	echo " -e : esvaziar a lixeira."
+}
+
+
+option=$1
+file=$2
+
+if [ $# -gt 2 ]; then
+	imprime_instrucoes
+else
+	
+	case $option in
+		-r )	remove $file ;; #remove um arquivo ou diretorio
+		-l )	list ;; #lista os arquivos na lixeira
+		-c	)	ctrash ;; #cria a lixeira
+		-d ) 	recover $file ;; #recupera um arquivo ou diretorio da lixeira
+		-e )	limpa_lixeira ;; #deleta todo o conteúdo da lixeira
+		-f )  limpa_periodica ;; #busca por lixo com mais de 30 dias e apaga
+		*)		imprime_instrucoes ;; #descreve as opcoes de utilização do utilitário trash
+
+	esac
+fi
